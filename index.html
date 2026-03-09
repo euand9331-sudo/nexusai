@@ -6,25 +6,13 @@
 <title>AI Nexus</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #f5f5f4;
-    --sidebar-bg: #efefed;
-    --white: #ffffff;
-    --border: #e4e4e0;
-    --border-light: #ebebea;
-    --text: #1a1a1a;
-    --text-muted: #8a8a8a;
-    --text-ph: #b8b8b4;
-    --dot-nexus:  #f97316;
-    --dot-claude: #e8845a;
-    --dot-gpt:    #22c55e;
-    --dot-gemini: #3b82f6;
-    --dot-custom: #a855f7;
-    --sidebar-w: 272px;
-    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --bg: #f5f5f4; --sidebar-bg: #efefed; --white: #ffffff;
+    --border: #e4e4e0; --border-light: #ebebea;
+    --text: #1a1a1a; --text-muted: #8a8a8a; --text-ph: #b8b8b4;
+    --dot-nexus: #f97316; --dot-claude: #e8845a; --dot-gemini: #3b82f6; --dot-custom: #a855f7;
+    --sidebar-w: 272px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
-
   html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; }
   .app { display: flex; height: 100vh; }
   .sidebar { width: var(--sidebar-w); background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
@@ -79,7 +67,6 @@
   .m-av { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; margin-top: 2px; }
   .m-av.ai { background: linear-gradient(135deg, #f97316, #ea580c); color: white; }
   .m-av.user { background: #1a1a1a; color: white; }
-  .m-av.ai.gpt { background: #22c55e !important; }
   .m-av.ai.gemini { background: #3b82f6 !important; }
   .m-av.ai.claude { background: #e8845a !important; }
   .m-av.ai.custom { background: #a855f7 !important; }
@@ -128,7 +115,6 @@
         <strong>NexusAI</strong> works automatically — no key needed! ✦<br><br>
         Optional other models:
         <a href="https://console.anthropic.com" target="_blank">Claude →</a>
-        <a href="https://platform.openai.com/api-keys" target="_blank">GPT →</a>
         <a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini →</a>
       </div>
       <div class="cred-row"><input class="cred-input" id="keyClaude" type="password" placeholder="Anthropic Key (Claude)"></div>
@@ -171,7 +157,7 @@
   </main>
 </div>
 <script>
-const BACKEND = 'https://nexusai-1uzc.vercel.app/api/chat';
+const BACKEND = 'https://nexusai-a95n.vercel.app/api/chat';
 
 const S = {
   model: 'nexus', convos: {}, curId: null,
@@ -309,7 +295,10 @@ async function sendMessage() {
 function showNeedsKey() {
   document.querySelector('.welcome')?.remove();
   const modelName = document.getElementById('modelSel').selectedOptions[0].text;
-  const keyLinks = { claude:'<a href="https://console.anthropic.com" target="_blank">Get Anthropic key →</a>', gemini:'<a href="https://aistudio.google.com/app/apikey" target="_blank">Get Google key →</a>' };
+  const keyLinks = {
+    claude:'<a href="https://console.anthropic.com" target="_blank">Get Anthropic key →</a>',
+    gemini:'<a href="https://aistudio.google.com/app/apikey" target="_blank">Get Google key →</a>'
+  };
   const wrap = document.getElementById('msgsWrap');
   const div = document.createElement('div');
   div.className='message ai';
@@ -360,7 +349,7 @@ async function callGemini(msgs) {
 async function callCustom(msgs) {
   const headers={'Content-Type':'application/json'};
   if (S.keys.custom) headers['Authorization']='Bearer '+S.keys.custom;
-  const res = await fetch(S.customEp, {method:'POST',headers,body:JSON.stringify({messages:msgs,max_tokens:1024})});
+  const res = await fetch(S.customEp,{method:'POST',headers,body:JSON.stringify({messages:msgs,max_tokens:1024})});
   const d = await res.json();
   return d.content?.[0]?.text||d.choices?.[0]?.message?.content||d.response||d.text||d.message||JSON.stringify(d);
 }
