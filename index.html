@@ -103,4 +103,304 @@
   .needs-key { padding: 12px 15px; background: #fffbf5; border: 1px solid #fed7aa; border-radius: 4px 14px 14px 14px; font-size: 13.5px; color: var(--text); line-height: 1.6; display: inline-block; }
   .needs-key a { color: #f97316; text-decoration: underline; cursor: pointer; }
   .input-area { padding: 10px 20px 14px; flex-shrink: 0; border-top: 1px solid var(--border-light); }
-  .err-bar { max-width: 700px; margin: 0 auto 8px; padd
+  .err-bar { max-width: 700px; margin: 0 auto 8px; padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 12.5px; color: #dc2626; display: none; }
+  .err-bar.show { display: block; }
+  .input-wrap { max-width: 700px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 13px; padding: 4px 5px 4px 13px; transition: border-color 0.18s, box-shadow 0.18s; }
+  .input-wrap:focus-within { border-color: #b4b4b0; box-shadow: 0 0 0 3px rgba(0,0,0,0.05); }
+  #chat-input { flex: 1; background: transparent; border: none; outline: none; font-family: var(--font); font-size: 14px; color: var(--text); line-height: 1.55; padding: 9px 0; resize: none; max-height: 160px; min-height: 40px; }
+  #chat-input::placeholder { color: var(--text-ph); }
+  .send-btn { width: 34px; height: 34px; flex-shrink: 0; margin-bottom: 3px; background: #1a1a1a; border: none; border-radius: 9px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s, transform 0.1s; }
+  .send-btn:hover { opacity: 0.78; }
+  .send-btn:active { transform: scale(0.93); }
+  .send-btn:disabled { opacity: 0.22; cursor: not-allowed; transform: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sb-top">
+      <button class="new-btn" onclick="newChat()"><span>+</span> New Chat</button>
+    </div>
+    <div class="chats-list" id="chatsList"></div>
+    <div class="sb-creds">
+      <div class="creds-lbl">API Credentials</div>
+      <div class="cred-note">
+        <strong>NexusAI</strong> works automatically — no key needed! ✦<br><br>
+        Optional other models:
+        <a href="https://console.anthropic.com" target="_blank">Claude →</a>
+        <a href="https://platform.openai.com/api-keys" target="_blank">GPT →</a>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini →</a>
+      </div>
+      <div class="cred-row"><input class="cred-input" id="keyClaude" type="password" placeholder="Anthropic Key (Claude)"></div>
+      <div class="cred-row"><input class="cred-input" id="keyGemini" type="password" placeholder="Google Key (Gemini)"></div>
+      <div class="cred-row"><input class="cred-input" id="keyCustom" type="password" placeholder="Custom Key (optional)"></div>
+      <div class="cred-row"><input class="cred-input" id="epCustom"  type="text"     placeholder="Custom Endpoint URL"></div>
+      <button class="save-btn" id="saveBtn" onclick="saveKeys()">Save Keys</button>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="header">
+      <div class="h-left">
+        <div class="m-dot" id="mDot"></div>
+        <span class="h-title">AI Nexus</span>
+      </div>
+      <div class="model-wrap">
+        <select class="model-sel" id="modelSel" onchange="onModelChange()">
+          <option value="nexus">NexusAI (Default)</option>
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="gemini">Gemini 1.5 Pro (Google)</option>
+          <option value="custom">Custom Model</option>
+        </select>
+      </div>
+    </header>
+    <div class="chat-area" id="chatArea">
+      <div class="msgs-wrap" id="msgsWrap"></div>
+    </div>
+    <div class="input-area">
+      <div class="err-bar" id="errBar"></div>
+      <div class="input-wrap">
+        <textarea id="chat-input" rows="1" placeholder="Message NexusAI..."
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+const BACKEND = 'https://nexusai-1uzc.vercel.app/api/chat';
+
+const S = {
+  model: 'nexus', convos: {}, curId: null,
+  keys: { claude: '', gemini: '', custom: '' },
+  customEp: '', loading: false
+};
+
+const DOT_COLORS = { nexus:'#f97316', claude:'#e8845a', gemini:'#3b82f6', custom:'#a855f7' };
+const AV_LABELS  = { nexus:'NX', claude:'AI', gemini:'GM', custom:'AI' };
+
+const NEXUS_SYSTEM = `You are NexusAI, a helpful, friendly, and highly capable AI assistant built into the AI Nexus platform.
+Your personality:
+- Warm, clear, and concise — never overly verbose
+- You explain things simply without being condescending
+- You are enthusiastic about helping with code, writing, analysis, and creative tasks
+- You use markdown formatting to make responses easy to read
+- When you don't know something, you say so honestly
+- You never pretend to be a human
+When introducing yourself, always say you are NexusAI.`;
+
+function gid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt(t) {
+  return esc(t)
+    .replace(/```(\w*)\n?([\s\S]*?)```/g,'<pre><code>$2</code></pre>')
+    .replace(/`([^`\n]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g,'<em>$1</em>')
+    .replace(/^- (.+)$/gm,'&bull; $1')
+    .replace(/\n/g,'<br>');
+}
+
+function init() {
+  loadLocal();
+  document.getElementById('keyClaude').value = S.keys.claude || '';
+  document.getElementById('keyGemini').value = S.keys.gemini || '';
+  document.getElementById('keyCustom').value = S.keys.custom || '';
+  document.getElementById('epCustom').value  = S.customEp    || '';
+  updateDot(); newChat();
+}
+
+function updateDot() {
+  document.getElementById('mDot').style.background = DOT_COLORS[S.model];
+  const ph = { nexus:'Message NexusAI...', claude:'Message Claude...', gemini:'Message Gemini...', custom:'Message AI...' };
+  document.getElementById('chat-input').placeholder = ph[S.model]||'Message AI...';
+}
+
+function onModelChange() { S.model = document.getElementById('modelSel').value; updateDot(); hideErr(); }
+
+function newChat() {
+  const id = gid(); S.curId = id;
+  S.convos[id] = { title:'Untitled Chat', msgs:[] };
+  showWelcome(); renderList();
+}
+
+function showWelcome() {
+  document.getElementById('msgsWrap').innerHTML = `
+    <div class="welcome">
+      <div class="welcome-icon">✦</div>
+      <div class="welcome-badge"><div class="bdot"></div> NexusAI is ready — no key needed</div>
+      <h2>How can I help you?</h2>
+      <p>NexusAI works instantly. Switch to Claude or Gemini anytime using the dropdown.</p>
+      <div class="starter-grid">
+        <div class="starter" onclick="startP('Explain how the internet works in simple terms')"><strong>📖 Explain</strong>How the internet works</div>
+        <div class="starter" onclick="startP('Write a Python function to find all prime numbers up to n')"><strong>💻 Code</strong>Python prime numbers</div>
+        <div class="starter" onclick="startP('Help me write a professional bio for my LinkedIn profile')"><strong>✉️ Write</strong>LinkedIn bio</div>
+        <div class="starter" onclick="startP('What are the best ways to learn programming fast?')"><strong>💡 Advise</strong>Learn programming faster</div>
+      </div>
+    </div>`;
+}
+
+function renderList() {
+  document.getElementById('chatsList').innerHTML = Object.keys(S.convos).reverse().map(id => {
+    const c = S.convos[id];
+    return `<div class="chat-item${id===S.curId?' active':''}" onclick="loadChat('${id}')">${esc(c.title)}</div>`;
+  }).join('');
+}
+
+function loadChat(id) {
+  S.curId = id;
+  document.getElementById('msgsWrap').innerHTML = '';
+  const msgs = S.convos[id].msgs;
+  if (!msgs.length) showWelcome();
+  else msgs.forEach(m => appendMsg(m.role, m.content, m.model||S.model, false));
+  renderList();
+}
+
+function startP(t) { document.getElementById('chat-input').value = t; sendMessage(); }
+function handleKey(e) { if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,160)+'px'; }
+
+async function sendMessage() {
+  const inp = document.getElementById('chat-input');
+  const text = inp.value.trim();
+  if (!text||S.loading) return;
+  hideErr();
+
+  if (S.model !== 'nexus') {
+    const key = S.model==='claude' ? S.keys.claude : S.model==='gemini' ? S.keys.gemini : S.keys.custom;
+    if (!key) { showNeedsKey(); return; }
+    if (S.model==='custom'&&!S.customEp) { showNeedsKey(); return; }
+  }
+
+  document.querySelector('.welcome')?.remove();
+  const convo = S.convos[S.curId];
+  convo.msgs.push({ role:'user', content:text, model:S.model });
+  if (convo.title==='Untitled Chat') { convo.title = text.length>40?text.slice(0,40)+'…':text; renderList(); }
+
+  appendMsg('user', text, S.model);
+  inp.value=''; inp.style.height='auto';
+
+  const tid='ty_'+gid();
+  const tel=document.createElement('div');
+  tel.className='message ai'; tel.id=tid;
+  tel.innerHTML=`<div class="m-av ai ${S.model}">${AV_LABELS[S.model]||'AI'}</div><div class="m-cnt"><div class="typing-bub"><div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div></div></div>`;
+  document.getElementById('msgsWrap').appendChild(tel);
+  scrollBot();
+
+  S.loading=true; document.getElementById('sendBtn').disabled=true;
+
+  try {
+    const apiMsgs = convo.msgs.filter(m=>m.role==='user'||m.role==='assistant').map(m=>({role:m.role,content:m.content}));
+    const reply = await callModel(apiMsgs);
+    document.getElementById(tid)?.remove();
+    convo.msgs.push({ role:'assistant', content:reply, model:S.model });
+    appendMsg('assistant', reply, S.model);
+  } catch(err) {
+    document.getElementById(tid)?.remove();
+    showErr('Error: '+err.message);
+  }
+
+  S.loading=false; document.getElementById('sendBtn').disabled=false; scrollBot();
+}
+
+function showNeedsKey() {
+  document.querySelector('.welcome')?.remove();
+  const modelName = document.getElementById('modelSel').selectedOptions[0].text;
+  const keyLinks = { claude:'<a href="https://console.anthropic.com" target="_blank">Get Anthropic key →</a>', gemini:'<a href="https://aistudio.google.com/app/apikey" target="_blank">Get Google key →</a>' };
+  const wrap = document.getElementById('msgsWrap');
+  const div = document.createElement('div');
+  div.className='message ai';
+  div.innerHTML=`<div class="m-av ai ${S.model}">${AV_LABELS[S.model]||'AI'}</div><div class="m-cnt"><div class="needs-key"><strong>${modelName}</strong> needs an API key.<br>${keyLinks[S.model]||''}<br><br>Or use <strong>NexusAI (Default)</strong> — no key needed! ✦</div></div>`;
+  wrap.appendChild(div); scrollBot();
+}
+
+async function callModel(msgs) {
+  if (S.model==='nexus')  return callNexus(msgs);
+  if (S.model==='claude') return callClaude(msgs);
+  if (S.model==='gemini') return callGemini(msgs);
+  if (S.model==='custom') return callCustom(msgs);
+}
+
+async function callNexus(msgs) {
+  const allMsgs = [{ role:'system', content:NEXUS_SYSTEM }, ...msgs];
+  const res = await fetch(BACKEND, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ messages:allMsgs, model:'meta-llama/llama-3.3-70b-instruct:free' })
+  });
+  const d = await res.json();
+  if (d.error) throw new Error(d.error);
+  return d.content || 'No response.';
+}
+
+async function callClaude(msgs) {
+  const res = await fetch('https://corsproxy.io/?'+encodeURIComponent('https://api.anthropic.com/v1/messages'), {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':S.keys.claude,'anthropic-version':'2023-06-01'},
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, messages:msgs })
+  });
+  const d = await res.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.content?.[0]?.text||'No response.';
+}
+
+async function callGemini(msgs) {
+  const contents = msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+  const res = await fetch('https://corsproxy.io/?'+encodeURIComponent(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${S.keys.gemini}`), {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({contents})
+  });
+  const d = await res.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.candidates?.[0]?.content?.parts?.[0]?.text||'No response.';
+}
+
+async function callCustom(msgs) {
+  const headers={'Content-Type':'application/json'};
+  if (S.keys.custom) headers['Authorization']='Bearer '+S.keys.custom;
+  const res = await fetch(S.customEp, {method:'POST',headers,body:JSON.stringify({messages:msgs,max_tokens:1024})});
+  const d = await res.json();
+  return d.content?.[0]?.text||d.choices?.[0]?.message?.content||d.response||d.text||d.message||JSON.stringify(d);
+}
+
+function appendMsg(role, content, model, scroll=true) {
+  const wrap = document.getElementById('msgsWrap');
+  const isAI = role!=='user';
+  const now = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const div = document.createElement('div');
+  div.className='message '+(isAI?'ai':'user');
+  div.innerHTML=`<div class="m-av ${isAI?'ai '+model:'user'}">${isAI?(AV_LABELS[model]||'AI'):'YOU'}</div>
+    <div class="m-cnt"><div class="m-bub">${fmt(content)}</div><div class="m-meta">${now}</div>
+    ${isAI?'<button class="copy-btn" onclick="copyMsg(this)">Copy</button>':''}</div>`;
+  wrap.appendChild(div);
+  if (scroll) scrollBot();
+}
+
+function copyMsg(btn) {
+  navigator.clipboard.writeText(btn.closest('.m-cnt').querySelector('.m-bub').innerText)
+    .then(()=>{btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1600);});
+}
+
+function scrollBot() { const a=document.getElementById('chatArea'); setTimeout(()=>a.scrollTo({top:a.scrollHeight,behavior:'smooth'}),40); }
+function showErr(msg) { const e=document.getElementById('errBar'); e.textContent=msg; e.classList.add('show'); }
+function hideErr() { document.getElementById('errBar').classList.remove('show'); }
+
+function saveKeys() {
+  S.keys.claude = document.getElementById('keyClaude').value.trim();
+  S.keys.gemini = document.getElementById('keyGemini').value.trim();
+  S.keys.custom = document.getElementById('keyCustom').value.trim();
+  S.customEp    = document.getElementById('epCustom').value.trim();
+  saveLocal();
+  const btn=document.getElementById('saveBtn');
+  btn.textContent='Saved ✓'; setTimeout(()=>btn.textContent='Save Keys',1600);
+}
+
+function saveLocal() { try{localStorage.setItem('ainexus4',JSON.stringify({keys:S.keys,ep:S.customEp}));}catch(e){} }
+function loadLocal() { try{const d=JSON.parse(localStorage.getItem('ainexus4')||'{}');if(d.keys)S.keys={...S.keys,...d.keys};if(d.ep)S.customEp=d.ep;}catch(e){} }
+
+init();
+</script>
+</body>
+</html>
