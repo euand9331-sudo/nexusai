@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-        'HTTP-Referer': 'https://nexusai-1uzc.vercel.app',
+        'HTTP-Referer': 'https://nexusai-a95n.vercel.app',
         'X-Title': 'NexusAI'
       },
       body: JSON.stringify({
